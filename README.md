@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pth2002/repofit/main/assets/hero-dark.svg" />
-  <img src="https://raw.githubusercontent.com/pth2002/repofit/main/assets/hero-light.svg" alt="repofit. Your agents already know you. Now they know what to install. A sketch: CLAUDE.md, AGENTS.md, Cursor rules and Gemini chats go into repofit, which reads them on your machine. Out come ntfy, SciencePlots and actionlint, each pointing back at the chat it came from." width="100%" />
+  <img src="https://raw.githubusercontent.com/pth2002/repofit/main/assets/hero-light.svg" alt="repofit. Your agents already know you. Now they know what to install. A sketch: AGENTS.md, CLAUDE.md, Cursor rules and Gemini chats go into repofit, which reads them on your machine. Out come ntfy, SciencePlots and actionlint, each pointing back at the chat it came from." width="100%" />
 </picture>
 
 <p align="center">
@@ -22,31 +22,32 @@ and will actually use. Every pick shows you the moment in your own history that 
 ## Install
 
 ```bash
-claude mcp add repofit -- uvx repofit mcp
+pipx install repofit
 ```
 
-That is all. [uv](https://docs.astral.sh/uv/) fetches repofit the first time your agent starts it, and repofit
-runs as an MCP server, so your agent's own model does the thinking: no API key, no account, nothing to host.
-Prefer a regular install? Run `pipx install repofit`, then `claude mcp add repofit -- repofit mcp`.
-
-<details>
-<summary>Codex, Cursor, Gemini CLI, Qwen Code</summary>
-
-Codex, in `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.repofit]
-command = "uvx"
-args = ["repofit", "mcp"]
-```
-
-Cursor (`~/.cursor/mcp.json`), Gemini CLI and Qwen Code (`settings.json`):
+Then point the agents you use at `repofit mcp`. Most of them read the same MCP config:
 
 ```json
-{ "mcpServers": { "repofit": { "command": "uvx", "args": ["repofit", "mcp"] } } }
+{ "mcpServers": { "repofit": { "command": "repofit", "args": ["mcp"] } } }
 ```
 
-</details>
+That line goes in `~/.cursor/mcp.json` for Cursor, `~/.gemini/settings.json` for Gemini CLI,
+`~/.qwen/settings.json` for Qwen Code, and the MCP settings of Cline, Windsurf or Claude Desktop. Codex reads
+TOML, and Claude Code adds servers from the command line:
+
+```toml
+# ~/.codex/config.toml
+[mcp_servers.repofit]
+command = "repofit"
+args = ["mcp"]
+```
+
+```bash
+claude mcp add repofit -- repofit mcp
+```
+
+repofit runs inside your agent, so your agent's own model does the thinking: no API key, no account, nothing
+to host. To skip the install step, use [uv](https://docs.astral.sh/uv/) and make the command `uvx repofit mcp`.
 
 ## Just ask
 
