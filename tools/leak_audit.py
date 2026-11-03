@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TEXT = {".py", ".md", ".toml", ".yml", ".yaml", ".txt", ".json", ".cfg", ".ini", ".html", ".js", ".css", ""}
+TEXT = {".py", ".md", ".toml", ".yml", ".yaml", ".txt", ".json", ".cfg", ".ini", ".html", ".js", ".css", ".svg", ""}
 CHECKS = {
     "email": re.compile(r"[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com)(?!example\.)[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
     "home path": re.compile(r"(?i)(?:C:\\\\?Users\\\\?|/Users/|/home/)(?!<|\{|name|user|you|runner|example)[A-Za-z0-9._-]{2,}"),

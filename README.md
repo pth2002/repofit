@@ -1,53 +1,41 @@
-# repofit
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/hero-dark.svg" />
+  <img src="./assets/hero-light.svg" alt="repofit. Your agents already know you. Now they know what to install. A sketch: CLAUDE.md, AGENTS.md, Cursor rules and Gemini chats go into repofit, which reads them on your machine. Out come ntfy, SciencePlots and actionlint, each pointing back at the chat it came from." width="100%" />
+</picture>
 
-Find GitHub projects that fit you, using what your coding agents already know about you.
+<p align="center">
+  <a href="https://github.com/pth2002/repofit/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/pth2002/repofit/test.yml?branch=main&style=flat-square&label=tests" alt="Tests" /></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-2563EB?style=flat-square" alt="Python 3.11+" />
+  <img src="https://img.shields.io/badge/dependencies-none-0d1117?style=flat-square" alt="No dependencies" />
+  <img src="https://img.shields.io/badge/MCP-server-0d1117?style=flat-square" alt="MCP server" />
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-0d1117?style=flat-square" alt="MIT" /></a>
+</p>
 
-GitHub has thousands of high-star repositories, and most lists of "tools you should try" are written for
-everyone at once. Your coding agents know you better. Claude Code, Codex, Cursor and the rest keep your
-memory files, your instructions and the history of what you asked them to do. repofit reads that on your
-machine, writes a one-page profile, and recommends repositories you probably have not heard of and would
-want. Every pick names the task in your history that it serves.
+**Stop scrolling trending. Ask the agent that has watched you work.**
 
-It also tells you which installed skills and MCP servers none of your sessions ever called. Each one costs
-context on every request.
-
-```text
- 1. owner/project  ★2.1k  Python  [install]
-    for       T3 turn experiment logs into paper figures
-    why       You redraw matplotlib figures by hand after every run; this applies a
-              publication style and fixes the layout in one call.
-    seen in   S41 2026-10-20 codex: "这张图的配色和留白还是不对，再改一版…"
-    https://github.com/owner/project
-
-Installed but never called in your sessions:
-  - claude-code: 5 skills unused in 81 sessions: canvas-design, pdf, ...
-```
-
-*(Illustrative output. Explanations come in the language you choose.)*
+Every week another wave of repositories hits ten thousand stars, and every "tools you should try" list is
+written for everyone at once. Meanwhile your coding agents have been taking notes on you for months: what you
+build, what keeps breaking, what you complained about at 2 a.m. repofit reads those notes on your own
+machine, from Claude Code, Codex, Cursor and a dozen more, and turns them into picks you have not heard of
+and will actually use. Every pick shows you the moment in your own history that earned it.
 
 ## Install
 
-Python 3.11 or newer. There are no dependencies.
-
 ```bash
-pipx install repofit
-# or the latest code from GitHub
 pipx install git+https://github.com/pth2002/repofit
 ```
-
-The first run downloads the candidate index (about 18,000 active repositories, rebuilt every week).
-
-## Use it from your agent
-
-repofit is an MCP server. Your agent's own model does the reasoning, so you need no API key.
-
-**Claude Code**
 
 ```bash
 claude mcp add repofit -- repofit mcp
 ```
 
-**Codex** (`~/.codex/config.toml`)
+That is all. repofit runs as an MCP server, so your agent's own model does the thinking: no API key, no
+account, nothing to host.
+
+<details>
+<summary>Codex, Cursor, Gemini CLI, Qwen Code</summary>
+
+Codex, in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.repofit]
@@ -55,108 +43,106 @@ command = "repofit"
 args = ["mcp"]
 ```
 
-**Cursor** (`~/.cursor/mcp.json`), **Gemini CLI** and **Qwen Code** (`settings.json`)
+Cursor (`~/.cursor/mcp.json`), Gemini CLI and Qwen Code (`settings.json`):
 
 ```json
 { "mcpServers": { "repofit": { "command": "repofit", "args": ["mcp"] } } }
 ```
 
-Then ask in a new session:
+</details>
+
+## Just ask
+
+Open a new session in any agent you connected and talk to it like a colleague who has read your history:
 
 - "Use repofit to recommend some GitHub projects for me."
 - "Does github.com/owner/name fit me?"
 - "Is there a good tool for turning PDFs into Markdown?"
 - "Which of my installed skills do I never use?"
 
-The first recommendation takes a few minutes: the agent reads your history, writes your profile and search
-terms, then ranks about 30 candidates. Later requests reuse the profile.
+The agent shows you the picks in the chat, and the same list stays one command away:
 
-## Use it from the command line
+<img src="./assets/terminal.png" alt="Terminal output of repofit recommend --show. Three picks, each with the task it serves, why it fits and the session it was seen in: ntfy for training jobs on rented GPU servers, seen in a Claude Code session asking whether the run was done; SciencePlots for paper figures, seen in a Codex session about a chart layout; actionlint for GitHub Actions releases, seen in a Cursor session about a workflow typo. Below them: one skipped household name, installed skills and MCP servers no session ever called, and tools left out because they are already in use." width="100%" />
+
+<sub>The picks come from a sample history. The text is exactly what the CLI prints.</sub>
+
+Every pick has a receipt. No "because you starred X": the `seen in` line points at the session where the need
+showed up and quotes what you said. If repofit cannot point at your history, it does not make the pick.
+
+The list at the bottom matters more than it sounds. Every skill and MCP server you installed and forgot still
+costs context on every single request, and repofit names the ones none of your sessions ever called.
+
+## How it picks
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/steps-dark.svg" />
+  <img src="./assets/steps-light.svg" alt="How repofit picks, as a sketch. Read memory files, rules and your own messages from every agent on your machine. Write a one-page profile where every line cites the chat it came from. Retrieve 30 of 18,338 repositories. Rank what you most likely do not know yet, crossing out what you already know." width="100%" />
+</picture>
+
+Each agent stores its history differently, and the formats change every few months, so repofit ships one
+adapter per agent. The profile is written from a redacted, numbered evidence pack, and any claim that cites
+evidence that does not exist is thrown out by the code, not left to the model's good manners. Retrieval runs
+one query per task you actually do, with project names and search phrases the model adds, so it finds the
+library a task depends on even when you never typed its name. The ranker is told to skip the household names
+you already know. The candidate pool is rebuilt every Monday from the GitHub API: active repositories above
+3,000 stars, new ones above 1,000, the agent ecosystem above 300, plus GitHub trending.
+
+## Your history stays yours
+
+- Everything runs on your machine. repofit reads the files your agents already keep and writes its own to
+  `~/.repofit`.
+- You choose the depth: installed tools only, plus memory and instruction files (the default), or plus your
+  own messages and tool calls.
+- Before any model sees a line, API keys, tokens, passwords, emails, phone numbers and random-looking strings
+  (yes, including the password you once pasted after `ssh`) are stripped, and your home folder becomes `~`.
+- With MCP, the text goes to the model your agent already uses. From the command line it goes only to the
+  provider you name, after you confirm.
+- Your notes and other people's READMEs can hide instructions. repofit hands everything over as data, and the
+  agent is told never to follow what it finds inside.
+
+## Supported agents
+
+| Agent | Sessions | Memory and instructions | Installed tools |
+|---|---|---|---|
+| Claude Code | yes | `CLAUDE.md`, project memory | skills, plugins, MCP servers |
+| Codex | yes, CLI and desktop | `AGENTS.md`, `memories/` | skills, plugins, MCP servers |
+| Cursor | yes | user rules, pending memories | MCP servers, extensions |
+| Hermes Agent | yes | `USER.md`, `MEMORY.md` | skills, MCP servers |
+| Gemini CLI, Qwen Code | yes | `GEMINI.md`, `QWEN.md` | MCP servers, extensions |
+| Cline, Roo Code, Kilo Code | yes | `.clinerules` | MCP servers |
+| Continue | yes | `rules/` | MCP servers |
+| VS Code Copilot | yes | `copilot-instructions.md` | MCP servers, extensions |
+| Kimi CLI, Aider | yes | | |
+| OpenCode | counted | `AGENTS.md` | MCP servers |
+| Windsurf, Claude Desktop, WorkBuddy, Trae | no local sessions | memories where present | MCP servers |
+
+Project instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules` and friends) are read too. Run
+`repofit scan` to see what it finds on your machine. If your agent hides its data somewhere else, open an
+issue with the path and it gets an adapter.
+
+<details>
+<summary>Command line, no agent needed</summary>
 
 ```bash
-repofit scan                                  # which agents are installed and what each one stores
+repofit scan                                    # which agents are installed and what each one stores
 repofit profile build --level L2 --provider deepseek
 repofit recommend --provider deepseek --lang zh
 ```
 
 Providers: `deepseek`, `openai`, `ollama`, `anthropic`, or any OpenAI-compatible endpoint with
-`--provider compatible --base-url ... --model ...`. Keys come from the usual environment variables
-(`DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). repofit shows how many characters it will send
-and asks before sending anything.
+`--provider compatible --base-url ... --model ...`. Keys come from `DEEPSEEK_API_KEY`, `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY`, and repofit shows how much text it will send before it sends anything.
 
-Without any provider:
+No provider at all? Each model step prints a prompt to paste into any chat and imports the answer:
 
 ```bash
-repofit profile prompt --level L2 > prompt.md   # paste into any agent, save its JSON answer
-repofit profile apply answer.json
-repofit profile expand --prompt                 # same for the search terms, then --apply
-repofit recommend --prompt --lang en            # same for the ranking, then --apply
+repofit profile prompt --level L2 > prompt.md   # then: repofit profile apply answer.json
+repofit profile expand --prompt                 # then: repofit profile expand --apply answer.json
+repofit recommend --prompt --lang en            # then: repofit recommend --apply answer.json
 repofit recommend --no-llm                      # keyword retrieval only, nothing leaves your machine
 ```
 
-## Privacy
-
-- Everything runs locally. repofit reads the files your agents already keep under your home directory and
-  writes its own files to `~/.repofit`.
-- You choose how much it reads. `L0`: installed tools and configs. `L1` (default): plus memory and
-  instruction files. `L2`: plus your own messages and the tool calls in your sessions.
-- Text is redacted before any model sees it: API keys and tokens, private keys, passwords, email addresses,
-  phone numbers and random-looking strings such as a password pasted after an `ssh` command. Your home
-  directory becomes `~`.
-- In MCP mode the text goes to the model your agent already uses. In CLI mode it goes only to the provider
-  you name, after you confirm.
-- Your memory files and other people's READMEs can contain instructions. repofit marks everything it returns
-  as data, and the agent is told not to follow instructions found inside it.
-
-## Supported agents
-
-| Agent | Sessions | Memory and instructions | Installed tools | Status |
-|---|---|---|---|---|
-| Claude Code | yes | `CLAUDE.md`, project memory | skills, plugins, MCP servers | tested on real data |
-| Codex | yes (CLI and desktop) | `AGENTS.md`, `memories/` | skills, plugins, MCP servers | tested on real data |
-| Cursor | yes | user rules, pending memories | MCP servers, extensions | tested on real data |
-| Hermes Agent | yes | `USER.md`, `MEMORY.md` | skills, MCP servers | tested on real data |
-| Gemini CLI, Qwen Code | yes | `GEMINI.md`, `QWEN.md` | MCP servers, extensions | written from docs |
-| Cline, Roo Code, Kilo Code | yes | `.clinerules` | MCP servers | written from docs |
-| Continue | yes | `rules/` | MCP servers | written from docs |
-| VS Code Copilot | yes | `copilot-instructions.md` | MCP servers, extensions | written from docs |
-| Kimi CLI, Aider | yes | | | written from docs |
-| OpenCode | counted only | `AGENTS.md` | MCP servers | partial |
-| Windsurf, Claude Desktop, WorkBuddy, Trae | no local sessions | memories where present | MCP servers | partial |
-
-Instruction files inside your projects (`AGENTS.md`, `CLAUDE.md`, `.cursorrules` and others) are read too.
-If your agent stores data somewhere repofit misses, `repofit scan` shows it as not found; issues with the
-paths are welcome.
-
-## How it works
-
-1. **Read.** One adapter per agent turns its sessions, memory files and installed tools into the same
-   records.
-2. **Profile.** A model writes a one-page profile from a redacted, numbered evidence pack: your recurring
-   tasks, interests, preferences and constraints. Every claim cites the evidence it came from, and repofit
-   drops claims whose citations do not exist.
-3. **Expand.** The model lists project names and search phrases for each task, so retrieval can find the
-   libraries a task depends on even when your own words never mention them.
-4. **Retrieve.** BM25 over each repository's name, description, topics and README opening, one query per task
-   and interest. Repositories you already use are set aside first. New and trending repositories get a small
-   boost.
-5. **Rank.** The model picks the candidates you most likely do not know and would want, and says what each
-   one changes. Picks that point at unknown candidates or tasks are dropped.
-
-The candidate index comes from the GitHub API: active repositories above 3,000 stars, new repositories above
-1,000, agent-ecosystem topics (MCP, Claude Code, Codex, agent skills) above 300, GitHub trending and three
-curated lists. A GitHub Action rebuilds it every Monday.
-
-## How well it works
-
-So far it has been measured on one person, the author, with blind ratings: recommendations from different
-versions were mixed, shown without their source, and rated one by one. In the current version, 10 of 10
-picks were rated useful, and 8 of those were projects the author did not know before. The first version
-scored 5 of 10 useful and 0 new. That is a single user, and the second version was tuned after seeing the
-first ratings, so ratings from other people are the next step.
-
-`repofit eval prepare --cutoff YYYY-MM-DD` runs a time-split check on your own history: it rebuilds your
-profile as of that date and compares the picks with what you started using afterwards.
+</details>
 
 ## Development
 
@@ -164,7 +150,7 @@ profile as of that date and compares the picks with what you started using after
 git clone https://github.com/pth2002/repofit && cd repofit
 python -m pip install -e . pytest
 python -m pytest
-repofit index build      # rebuild the index yourself; needs a GitHub token (GITHUB_TOKEN or `gh auth login`)
+repofit index build      # rebuild the candidate pool yourself; needs a GitHub token
 ```
 
 ## License
