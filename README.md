@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/hero-dark.svg" />
-  <img src="./assets/hero-light.svg" alt="repofit. Your agents already know you. Now they know what to install. A sketch: CLAUDE.md, AGENTS.md, Cursor rules and Gemini chats go into repofit, which reads them on your machine. Out come ntfy, SciencePlots and actionlint, each pointing back at the chat it came from." width="100%" />
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pth2002/repofit/main/assets/hero-dark.svg" />
+  <img src="https://raw.githubusercontent.com/pth2002/repofit/main/assets/hero-light.svg" alt="repofit. Your agents already know you. Now they know what to install. A sketch: CLAUDE.md, AGENTS.md, Cursor rules and Gemini chats go into repofit, which reads them on your machine. Out come ntfy, SciencePlots and actionlint, each pointing back at the chat it came from." width="100%" />
 </picture>
 
 <p align="center">
@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/python-3.11%2B-2563EB?style=flat-square" alt="Python 3.11+" />
   <img src="https://img.shields.io/badge/dependencies-none-0d1117?style=flat-square" alt="No dependencies" />
   <img src="https://img.shields.io/badge/MCP-server-0d1117?style=flat-square" alt="MCP server" />
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-0d1117?style=flat-square" alt="MIT" /></a>
+  <a href="https://github.com/pth2002/repofit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-0d1117?style=flat-square" alt="MIT" /></a>
 </p>
 
 **Stop scrolling trending. Ask the agent that has watched you work.**
@@ -22,15 +22,12 @@ and will actually use. Every pick shows you the moment in your own history that 
 ## Install
 
 ```bash
-pipx install git+https://github.com/pth2002/repofit
+claude mcp add repofit -- uvx repofit mcp
 ```
 
-```bash
-claude mcp add repofit -- repofit mcp
-```
-
-That is all. repofit runs as an MCP server, so your agent's own model does the thinking: no API key, no
-account, nothing to host.
+That is all. [uv](https://docs.astral.sh/uv/) fetches repofit the first time your agent starts it, and repofit
+runs as an MCP server, so your agent's own model does the thinking: no API key, no account, nothing to host.
+Prefer a regular install? Run `pipx install repofit`, then `claude mcp add repofit -- repofit mcp`.
 
 <details>
 <summary>Codex, Cursor, Gemini CLI, Qwen Code</summary>
@@ -39,14 +36,14 @@ Codex, in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.repofit]
-command = "repofit"
-args = ["mcp"]
+command = "uvx"
+args = ["repofit", "mcp"]
 ```
 
 Cursor (`~/.cursor/mcp.json`), Gemini CLI and Qwen Code (`settings.json`):
 
 ```json
-{ "mcpServers": { "repofit": { "command": "repofit", "args": ["mcp"] } } }
+{ "mcpServers": { "repofit": { "command": "uvx", "args": ["repofit", "mcp"] } } }
 ```
 
 </details>
@@ -62,7 +59,7 @@ Open a new session in any agent you connected and talk to it like a colleague wh
 
 The agent shows you the picks in the chat, and the same list stays one command away:
 
-<img src="./assets/terminal.png" alt="Terminal output of repofit recommend --show. Three picks, each with the task it serves, why it fits and the session it was seen in: ntfy for training jobs on rented GPU servers, seen in a Claude Code session asking whether the run was done; SciencePlots for paper figures, seen in a Codex session about a chart layout; actionlint for GitHub Actions releases, seen in a Cursor session about a workflow typo. Below them: one skipped household name, installed skills and MCP servers no session ever called, and tools left out because they are already in use." width="100%" />
+<img src="https://raw.githubusercontent.com/pth2002/repofit/main/assets/terminal.png" alt="Terminal output of repofit recommend --show. Three picks, each with the task it serves, why it fits and the session it was seen in: ntfy for training jobs on rented GPU servers, seen in a Claude Code session asking whether the run was done; SciencePlots for paper figures, seen in a Codex session about a chart layout; actionlint for GitHub Actions releases, seen in a Cursor session about a workflow typo. Below them: one skipped household name, installed skills and MCP servers no session ever called, and tools left out because they are already in use." width="100%" />
 
 <sub>The picks come from a sample history. The text is exactly what the CLI prints.</sub>
 
@@ -75,8 +72,8 @@ costs context on every single request, and repofit names the ones none of your s
 ## How it picks
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/steps-dark.svg" />
-  <img src="./assets/steps-light.svg" alt="How repofit picks, as a sketch. Read memory files, rules and your own messages from every agent on your machine. Write a one-page profile where every line cites the chat it came from. Retrieve 30 of 18,338 repositories. Rank what you most likely do not know yet, crossing out what you already know." width="100%" />
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pth2002/repofit/main/assets/steps-dark.svg" />
+  <img src="https://raw.githubusercontent.com/pth2002/repofit/main/assets/steps-light.svg" alt="How repofit picks, as a sketch. Read memory files, rules and your own messages from every agent on your machine. Write a one-page profile where every line cites the chat it came from. Retrieve 30 of 18,338 repositories. Rank what you most likely do not know yet, crossing out what you already know." width="100%" />
 </picture>
 
 Each agent stores its history differently, and the formats change every few months, so repofit ships one
@@ -122,6 +119,8 @@ issue with the path and it gets an adapter.
 
 <details>
 <summary>Command line, no agent needed</summary>
+
+Install with `pipx install repofit`, or put `uvx` in front of each command.
 
 ```bash
 repofit scan                                    # which agents are installed and what each one stores
