@@ -64,10 +64,19 @@ def apply_synthesis(profile: dict, ev: Evidence | None, synthesis: dict, model: 
         profile["evidence"] = {
             ref: {"kind": items[ref].kind, "agent": items[ref].agent, "source": items[ref].source,
                   "project": items[ref].project, "when": items[ref].when,
-                  "excerpt": items[ref].text.replace("\n", " ")[:160]}
+                  "excerpt": _excerpt(items[ref])}
             for ref in sorted(cited, key=lambda r: (r[0], int(r[1:]) if r[1:].isdigit() else 0))
         }
     return profile
+
+
+def _excerpt(item) -> str:
+    """The quote shown next to a pick. Session items are bulleted messages in the pack; the quote drops the
+    bullets and the title line so it reads as what the user said."""
+    if item.kind != "session":
+        return item.text.replace("\n", " ")[:160]
+    lines = [line.removeprefix("- ").strip() for line in item.text.splitlines() if not line.startswith("title: ")]
+    return " / ".join(line for line in lines if line)[:160]
 
 
 def save(profile: dict, path: Path) -> None:
