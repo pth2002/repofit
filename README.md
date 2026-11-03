@@ -19,7 +19,7 @@ build, what keeps breaking, what you complained about at 2 a.m. repofit reads th
 machine, from Claude Code, Codex, Cursor and a dozen more, and turns them into picks you have not heard of
 and will actually use. Every pick shows you the moment in your own history that earned it.
 
-https://github.com/user-attachments/assets/b733c492-a527-4cb8-8954-8cc8aa59d218
+https://github.com/user-attachments/assets/c7ac0bcf-74ed-4a09-9295-b6d06e6d67c1
 
 ## Install
 
