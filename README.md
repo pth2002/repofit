@@ -156,3 +156,5 @@ repofit index build      # rebuild the candidate pool yourself; needs a GitHub t
 ## License
 
 MIT
+
+<!-- mcp-name: io.github.pth2002/repofit -->
