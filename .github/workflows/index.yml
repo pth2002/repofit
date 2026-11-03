@@ -1,0 +1,33 @@
+name: index
+
+# Rebuilds the candidate pool every Monday and publishes it as a release asset,
+# so `repofit index pull` downloads one file instead of calling the GitHub API.
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - name: Build the index
+        # A personal token in INDEX_TOKEN gets a higher GraphQL budget than the workflow token.
+        env:
+          GITHUB_TOKEN: ${{ secrets.INDEX_TOKEN || secrets.GITHUB_TOKEN }}
+        run: repofit index build --out index.json.gz
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view index >/dev/null 2>&1 || gh release create index --title "Candidate index" --notes "Rebuilt weekly by the index workflow."
+          gh release upload index index.json.gz --clobber

@@ -1,0 +1,18 @@
+# Private working notes: they quote the author's own sessions and local paths.
+DESIGN.md
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+
+# Local outputs of the tool itself
+index.json.gz
+profile.json
+evidence.json
+candidates.json
+recommendations.json
+*_parts.json
