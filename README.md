@@ -11,6 +11,8 @@
   <a href="https://github.com/pth2002/repofit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-0d1117?style=flat-square" alt="MIT" /></a>
 </p>
 
+<p align="center"><b>English</b> · <a href="https://github.com/pth2002/repofit/blob/main/README_zh.md">简体中文</a></p>
+
 **Stop scrolling trending. Ask the agent that has watched you work.**
 
 Every week another wave of repositories hits ten thousand stars, and every "tools you should try" list is
