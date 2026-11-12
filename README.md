@@ -21,6 +21,39 @@ build, what keeps breaking, what you complained about at 2 a.m. repofit reads th
 machine, from Claude Code, Codex, Cursor and a dozen more, and turns them into picks you have not heard of
 and will actually use. Every pick shows you the moment in your own history that earned it.
 
+## Try it in one line
+
+```bash
+uvx repofit unused
+```
+
+No install, no account, no API key and no model. It reads the session logs your agents already keep and lists
+the MCP servers and skills you installed but never called. Each one still costs context on every request.
+Without [uv](https://docs.astral.sh/uv/), run `pipx run repofit unused`.
+
+```text
+Read 17 sessions from Claude Code, Codex, Gemini CLI. Nothing left this machine.
+
+7 of 9 installed MCP servers and skills were never called:
+
+  Claude Code · 12 sessions
+    MCP server   sqlite
+    skills       canvas-design, docx, pptx
+  Codex · 4 sessions
+    MCP server   puppeteer
+    skills       slack-gif-creator, xlsx
+
+Each one still costs context on every request. Remove the ones you do not need.
+
+Not checked: 1 tool in Gemini CLI. Its logs do not say which server or skill each call went
+to, or hold no sessions yet.
+
+Want GitHub projects picked from the same history? Connect `repofit mcp` to your agent:
+https://github.com/pth2002/repofit
+```
+
+<sub>Output on a sample history.</sub>
+
 https://github.com/user-attachments/assets/c7ac0bcf-74ed-4a09-9295-b6d06e6d67c1
 
 ## Install
@@ -128,6 +161,7 @@ issue with the path and it gets an adapter.
 Install with `pipx install repofit`, or put `uvx` in front of each command.
 
 ```bash
+repofit unused                                  # installed MCP servers and skills no session ever called
 repofit scan                                    # which agents are installed and what each one stores
 repofit profile build --level L2 --provider deepseek
 repofit recommend --provider deepseek --lang zh

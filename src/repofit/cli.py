@@ -10,7 +10,7 @@ from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 
-from repofit import __version__, evaluate, llm, match, mcp_server, prompts
+from repofit import __version__, evaluate, llm, match, mcp_server, prompts, unused
 from repofit import index as index_mod
 from repofit import profile as profile_mod
 from repofit.adapters import all_adapters
@@ -121,6 +121,18 @@ def cmd_inventory(args) -> int:
     for a in detected(args.agent):
         for item in report(a).inventory:
             print(f"{item.agent:<14} {item.kind:<11} {item.name:<40} {item.source or ''}")
+    return 0
+
+
+def cmd_unused(args) -> int:
+    if args.days is not None and args.days < 1:
+        print("--days needs a whole number of days, 1 or more.", file=sys.stderr)
+        return 2
+    result = unused.collect(args.agent, args.days, progress=lambda msg: print(f"… {msg}", file=sys.stderr))
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(unused.render(result, limit=None if args.all else 10))
     return 0
 
 
@@ -454,6 +466,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("scan", help="list detected agents and what each one stores")
+    p = sub.add_parser("unused", help="installed MCP servers and skills that no session ever called; no model needed")
+    p.set_defaults(fn=cmd_unused)
+    p.add_argument("--agent", choices=[a.id for a in all_adapters()])
+    p.add_argument("--days", type=int, help="only sessions started in the last N days")
+    p.add_argument("--all", action="store_true", help="list every name instead of the first ten of each kind")
+    p.add_argument("--json", action="store_true")
     agent_ids = [a.id for a in all_adapters()]
     for name, fn, help_ in (("sessions", cmd_sessions, "list normalized sessions"),
                             ("signals", cmd_signals, "aggregate evidence across sessions"),

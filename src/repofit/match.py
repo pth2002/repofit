@@ -28,6 +28,9 @@ _TOKEN = re.compile(r"[a-z0-9][a-z0-9+#]*")
 # Name parts that say how a project ships rather than what it is.
 _PACKAGING = {"mcp", "server", "cli", "py", "js", "python", "node", "rs", "go", "app", "the"}
 SKILL_TRACKED = {"claude-code", "codex", "hermes"}  # agents whose sessions show which skills ran
+# Agents whose real session logs were checked to name the MCP server behind each call. Cline names it too, but its
+# parser was written from docs only, so its servers are reported as not checked rather than risk a false "unused".
+MCP_TRACKED = {"claude-code", "codex"}
 
 
 def tokens(text: str) -> list[str]:
@@ -290,7 +293,7 @@ def unused_tools(profile: dict) -> list[dict]:
         if key in seen or not sessions.get(agent):
             continue
         seen.add(key)
-        if kind == "mcp_server" and (agent, _norm(name)) not in mcp:
+        if kind == "mcp_server" and agent in MCP_TRACKED and (agent, _norm(name)) not in mcp:
             out.append({"agent": agent, "kind": kind, "name": name, "sessions": sessions[agent]})
         elif kind == "skill" and agent in SKILL_TRACKED and (agent, _norm(name)) not in skills:
             out.append({"agent": agent, "kind": kind, "name": name, "sessions": sessions[agent]})

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from repofit.normalize import (
 from repofit.paths import HOME, env_path
 
 _MARKERS = ('"type":"user"', '"type":"assistant"', '"customTitle"')
+_COMMAND = re.compile(r"<command-name>/?([^<\s]+)</command-name>")
 
 
 class ClaudeCode(Adapter):
@@ -59,12 +61,13 @@ class ClaudeCode(Adapter):
         return len(self._files())
 
     def sessions(self) -> Iterator[Session]:
+        skills = {i.name.lower() for i in self._skills(self.home() / "skills")}
         for path in self._files():
-            session = self._parse(path)
+            session = self._parse(path, skills)
             if session.user_messages or session.tool_calls:
                 yield session
 
-    def _parse(self, path: Path) -> Session:
+    def _parse(self, path: Path, skills: set[str] = frozenset()) -> Session:
         s = Session(self.id, path.stem)
         for r in iter_jsonl(path, _MARKERS):
             if r.get("isSidechain"):
@@ -79,6 +82,11 @@ class ClaudeCode(Adapter):
                 if isinstance(content, list) and any(p.get("type") == "tool_result" for p in content if isinstance(p, dict)):
                     continue
                 text = text_parts(content).strip()
+                # A skill run as a slash command (/pdf) leaves no Skill tool call, only this marker. Built-in
+                # commands such as /model share the marker, so only installed skill names count.
+                for name in _COMMAND.findall(text):
+                    if name.split(":")[-1].lower() in skills:
+                        s.tool_calls.append(make_call("Skill", name))
                 if text and not is_injected(text):
                     s.user_messages.append(text)
             elif kind == "assistant":

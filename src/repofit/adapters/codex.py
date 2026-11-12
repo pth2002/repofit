@@ -144,16 +144,20 @@ class Codex(Adapter):
 
 
 def _apply_item(s: Session, item: dict) -> None:
-    kind = item.get("type")
+    kind = str(item.get("type") or "")
+    kind = kind[:1].lower() + kind[1:]  # the app database writes "commandExecution", newer rollouts "CommandExecution"
     if kind == "userMessage":
         text = text_parts(item.get("content")).strip()
         if text and not is_injected(text):
             s.user_messages.append(text)
     elif kind == "commandExecution":
-        s.tool_calls.append(make_call("commandExecution", str(item.get("command") or "")))
+        command = item.get("command")
+        if isinstance(command, list):  # newer rollouts store argv, e.g. ["pwsh.exe", "-Command", "..."]
+            command = " ".join(str(part) for part in command)
+        s.tool_calls.append(make_call("commandExecution", str(command or "")))
     elif kind == "mcpToolCall":
         s.tool_calls.append(make_call("mcpToolCall", f"{item.get('server')}/{item.get('tool')}"))
-    elif kind == "webSearch":
+    elif kind == "webSearch" or (kind == "extension" and item.get("kind") == "web.search"):
         s.tool_calls.append(make_call("web_search", str(item.get("query") or "")))
     elif kind == "fileChange":
         s.tool_calls.append(make_call("fileChange"))

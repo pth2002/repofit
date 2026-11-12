@@ -15,7 +15,7 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
-from repofit import __version__, llm, match, prompts
+from repofit import __version__, llm, match, prompts, unused
 from repofit import index as index_mod
 from repofit import profile as profile_mod
 from repofit.evidence import LEVELS
@@ -293,13 +293,7 @@ class Server:
                 "Use check_repo on one before recommending it.\n\n" + "\n".join(lines))
 
     def unused_tools(self) -> str:
-        profile = self.profile()
-        if profile.get("level") != "L2":
-            return "This needs a level L2 profile, because only session tool calls show which tools were used."
-        unused = match.unused_tools(profile)
-        if not unused:
-            return "Every installed MCP server and skill that can be tracked was called at least once."
-        return match.render_unused(unused, limit=1000)
+        return unused.render(unused.collect(), limit=None, footer=False)
 
 
 _EMPTY = {"type": "object", "properties": {}}

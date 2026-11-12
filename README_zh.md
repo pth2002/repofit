@@ -17,6 +17,37 @@
 
 GitHub 上每周都有一批新项目冲上上万颗星，各种“值得一试的工具”清单又是写给所有人看的。可你的编程助手已经默默记了你好几个月：你在做什么，什么老是出问题，凌晨两点抱怨过什么。repofit 在你自己的电脑上读这些记录，覆盖 Claude Code、Codex、Cursor 等十几种 agent，然后挑出你还没听说过、但真会用上的项目。每条推荐都会告诉你，它来自你历史里的哪一刻。
 
+## 一行命令先试试
+
+```bash
+uvx repofit unused
+```
+
+不用安装，不用注册，不用 API key，也不用模型。它读取各家 agent 本来就存着的会话记录，列出你装了却从没调用过的 MCP 服务器和 skill。它们每次请求都还在占用上下文。没装 [uv](https://docs.astral.sh/uv/) 的话，用 `pipx run repofit unused`。
+
+```text
+Read 17 sessions from Claude Code, Codex, Gemini CLI. Nothing left this machine.
+
+7 of 9 installed MCP servers and skills were never called:
+
+  Claude Code · 12 sessions
+    MCP server   sqlite
+    skills       canvas-design, docx, pptx
+  Codex · 4 sessions
+    MCP server   puppeteer
+    skills       slack-gif-creator, xlsx
+
+Each one still costs context on every request. Remove the ones you do not need.
+
+Not checked: 1 tool in Gemini CLI. Its logs do not say which server or skill each call went
+to, or hold no sessions yet.
+
+Want GitHub projects picked from the same history? Connect `repofit mcp` to your agent:
+https://github.com/pth2002/repofit
+```
+
+<sub>样例历史上的输出。</sub>
+
 https://github.com/user-attachments/assets/c7ac0bcf-74ed-4a09-9295-b6d06e6d67c1
 
 ## 安装
@@ -106,6 +137,7 @@ agent 会直接在对话里列出推荐，同一份清单在命令行里也随�
 用 `pipx install repofit` 安装，或者在每条命令前加上 `uvx`。
 
 ```bash
+repofit unused                                  # 装了却从没被调用过的 MCP 服务器和 skill
 repofit scan                                    # 装了哪些 agent，每个存了什么
 repofit profile build --level L2 --provider deepseek
 repofit recommend --provider deepseek --lang zh
