@@ -13,7 +13,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # A slow week is better than no index. GitHub can rate limit the README batches for minutes at a time,
+    # and the build then slows down to the pace GitHub accepts. Hosted runners allow up to 360 minutes.
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

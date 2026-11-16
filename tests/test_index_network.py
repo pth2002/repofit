@@ -3,17 +3,31 @@
 A response cut off halfway raises http.client.IncompleteRead, which is not an OSError. On 2026-11-16 one of
 those ended the whole weekly index build, so each call site is checked against it here.
 """
+import email.message
 import gzip
 import http.client
 import io
 import json
+import threading
+import urllib.error
 
 import pytest
 
 from repofit import index
 
 
+def _headers(fields=None):
+    msg = email.message.Message()
+    for key, value in (fields or {}).items():
+        msg[key] = value
+    return msg
+
+
 class Reply(io.BytesIO):
+    def __init__(self, body=b"", headers=None):
+        super().__init__(body)
+        self.headers = _headers(headers)
+
     def __enter__(self):
         return self
 
@@ -22,7 +36,7 @@ class Reply(io.BytesIO):
 
 
 def fake_urlopen(monkeypatch, *outcomes):
-    """Each call takes the next outcome: an exception to raise, or bytes to return."""
+    """Each call takes the next outcome: an exception to raise, a Reply, or bytes to return."""
     calls = []
 
     def urlopen(req, timeout=None):
@@ -30,11 +44,23 @@ def fake_urlopen(monkeypatch, *outcomes):
         calls.append(getattr(req, "full_url", req))
         if isinstance(outcome, BaseException):
             raise outcome
-        return Reply(outcome)
+        return outcome if isinstance(outcome, Reply) else Reply(outcome)
 
     monkeypatch.setattr(index.urllib.request, "urlopen", urlopen)
     monkeypatch.setattr(index.time, "sleep", lambda s: None)
     return calls
+
+
+def fake_clock(monkeypatch):
+    """A clock that only moves when the code sleeps, so waits of minutes take no time."""
+    now = [1000.0]
+    monkeypatch.setattr(index.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(index.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    return now
+
+
+def refused(code, headers=None, body=b""):
+    return urllib.error.HTTPError(index._API, code, "refused", _headers(headers), io.BytesIO(body))
 
 
 CUT = http.client.IncompleteRead(b"{\"data\": {", 449679)
@@ -98,3 +124,75 @@ def test_check_repo_survives_a_cut_off_readme(monkeypatch):
     fake_urlopen(monkeypatch, json.dumps(meta).encode(), CUT)
     repo = index.fetch_repo("o/n")
     assert repo["name"] == "o/n" and repo["readme"] == ""
+
+
+# On 2026-11-16 GitHub answered the README batches with secondary limits and Retry-After: 300. Four workers
+# resumed together and hit the limit again, so the build ran into the two-hour job timeout.
+
+def test_secondary_limit_waits_retry_after_and_lowers_concurrency(monkeypatch):
+    limit = refused(403, {"Retry-After": "300"}, b'{"message": "You have exceeded a secondary rate limit."}')
+    calls = fake_urlopen(monkeypatch, limit, b'{"data": {"x": 1}}')
+    now, notes = fake_clock(monkeypatch), []
+    gh = index.GitHub("t", notes.append)
+    assert gh.query("query { x }") == {"x": 1}
+    assert len(calls) == 2 and now[0] == 1300
+    assert gh.throttle.limit == 3 and notes == ["rate limited, waiting 300s, then 3 requests at a time"]
+
+
+def test_one_burst_of_limited_requests_lowers_concurrency_once(monkeypatch):
+    now = fake_clock(monkeypatch)
+    throttle = index._Throttle(4)
+    # The requests already in flight come back limited a moment after the first one.
+    assert throttle.limited(300) and not throttle.limited(300) and not throttle.limited(300)
+    assert throttle.limit == 3
+    now[0] += 301
+    assert throttle.limited(300) and throttle.limit == 2
+    for _ in range(3):
+        now[0] += 301
+        throttle.limited(300)
+    assert throttle.limit == 1
+
+
+def test_spent_hourly_budget_waits_for_the_reset(monkeypatch):
+    reset = int(index.time.time()) + 120
+    spent = Reply(json.dumps({"errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]}).encode(),
+                  {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": str(reset)})
+    fake_urlopen(monkeypatch, spent, b'{"data": {"x": 3}}')
+    now = fake_clock(monkeypatch)
+    assert index.GitHub("t").query("query { x }") == {"x": 3}
+    assert 119 <= now[0] - 1000 <= 123
+
+
+def test_a_refusal_that_is_not_a_rate_limit_fails_at_once(monkeypatch):
+    calls = fake_urlopen(monkeypatch, refused(403, body=b'{"message": "Resource not accessible by integration"}'))
+    with pytest.raises(RuntimeError, match="HTTP 403: .*not accessible"):
+        index.GitHub("t").query("query { x }")
+    assert len(calls) == 1
+
+
+def test_endless_rate_limits_end_with_a_clear_error(monkeypatch):
+    calls = fake_urlopen(monkeypatch, refused(429))
+    fake_clock(monkeypatch)
+    with pytest.raises(RuntimeError, match="kept rate limiting"):
+        index.GitHub("t").query("query { x }")
+    assert len(calls) == 21
+
+
+def test_lookups_never_run_more_requests_than_the_throttle_allows(monkeypatch):
+    lock, state = threading.Lock(), {"running": 0, "most": 0}
+
+    def urlopen(req, timeout=None):
+        with lock:
+            state["running"] += 1
+            state["most"] = max(state["most"], state["running"])
+        threading.Event().wait(0.02)
+        n = json.loads(req.data)["query"].count("repository(")
+        with lock:
+            state["running"] -= 1
+        return Reply(json.dumps({"data": {f"r{j}": {"nameWithOwner": f"o/n{j}"} for j in range(n)}}).encode())
+
+    monkeypatch.setattr(index.urllib.request, "urlopen", urlopen)
+    gh = index.GitHub("t")
+    gh.throttle.limit = 2
+    found = list(gh.repos([f"o/n{j}" for j in range(40)], "nameWithOwner", batch=5))
+    assert len(found) == 40 and state["most"] <= 2

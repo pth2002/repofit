@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -143,42 +144,112 @@ def github_token() -> str | None:
     return None
 
 
+class _Throttle:
+    """Paces the requests of every worker that shares one GitHub client.
+
+    GitHub answers a burst of heavy queries with a secondary rate limit and a Retry-After. All workers pause
+    until then, because each one would hit the same limit on its own. Each limit also lowers by one how many
+    requests may run at once, so the build settles on the pace GitHub accepts instead of bursting again.
+    """
+
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.running = 0
+        self.resume = 0.0
+        self.cond = threading.Condition()
+
+    def __enter__(self):
+        while True:
+            with self.cond:
+                pause = self.resume - time.monotonic()
+                if pause <= 0 and self.running < self.limit:
+                    self.running += 1
+                    return self
+                if pause <= 0:
+                    self.cond.wait()
+                    continue
+            time.sleep(pause)
+
+    def __exit__(self, *exc):
+        with self.cond:
+            self.running -= 1
+            self.cond.notify_all()
+
+    def limited(self, wait: float) -> bool:
+        """Pause everyone for `wait` seconds. True when this limit is a new one, not part of the last burst."""
+        with self.cond:
+            now = time.monotonic()
+            new = now >= self.resume  # requests already in flight come back limited too, a few seconds later
+            if new:
+                self.limit = max(1, self.limit - 1)
+            self.resume = max(self.resume, now + wait)
+            self.cond.notify_all()
+            return new
+
+
+def _limit_wait(code: int, headers, detail: str) -> int | None:
+    """Seconds to wait when GitHub refused a request for going over a rate limit, None for any other refusal."""
+    try:
+        if headers.get("Retry-After"):  # secondary limit
+            return max(1, int(headers["Retry-After"]))
+        if headers.get("X-RateLimit-Remaining") == "0":  # hourly budget spent, refilled at a fixed time
+            return max(1, int(headers.get("X-RateLimit-Reset") or 0) - int(time.time()) + 1)
+    except ValueError:
+        pass
+    return 60 if code == 429 or "rate limit" in detail.lower() or "abuse" in detail.lower() else None
+
+
 class GitHub:
-    def __init__(self, token: str, progress=None):
+    def __init__(self, token: str, progress=None, workers: int = 4):
         self.token = token
         self.note = progress or (lambda msg: None)
         self.calls = 0
+        self.workers = workers
+        self.throttle = _Throttle(workers)
 
     def query(self, query: str, variables: dict | None = None) -> dict:
         body = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
-        for attempt in range(5):
+        failures = waits = 0
+        while True:
             req = urllib.request.Request(_API, data=body, method="POST",
                                          headers={**_HEADERS, "Authorization": f"bearer {self.token}"})
             try:
-                with urllib.request.urlopen(req, timeout=90) as resp:
+                with self.throttle, urllib.request.urlopen(req, timeout=90) as resp:
                     self.calls += 1
-                    data = json.loads(resp.read().decode("utf-8"))
+                    headers, data = resp.headers, json.loads(resp.read().decode("utf-8"))
             except urllib.error.HTTPError as exc:
-                if exc.code in (403, 429):  # secondary rate limit: back off and retry
-                    wait = int(exc.headers.get("Retry-After") or 60)
-                    self.note(f"rate limited, waiting {wait}s")
-                    time.sleep(wait)
-                    continue
-                if exc.code in (502, 503, 504) and attempt < 4:
-                    time.sleep(3 * (attempt + 1))
-                    continue
-                raise RuntimeError(f"GitHub API HTTP {exc.code}: {exc.read().decode('utf-8', 'replace')[:200]}") from exc
+                try:
+                    detail = exc.read().decode("utf-8", "replace")
+                except (*_NETWORK, ValueError):
+                    detail = ""
+                wait = _limit_wait(exc.code, exc.headers, detail) if exc.code in (403, 429) else None
+                if wait is None:
+                    if exc.code in (502, 503, 504) and failures < 4:
+                        failures += 1
+                        time.sleep(3 * failures)
+                        continue
+                    raise RuntimeError(f"GitHub API HTTP {exc.code}: {detail[:200]}") from exc
             except (*_NETWORK, ValueError) as exc:  # ValueError: a body cut off before the JSON ends
-                if attempt < 4:
-                    time.sleep(3 * (attempt + 1))
+                if failures < 4:
+                    failures += 1
+                    time.sleep(3 * failures)
                     continue
                 raise RuntimeError(f"cannot reach the GitHub API: {exc}") from exc
-            # Missing repos come back as null data plus an error; everything else is a real failure.
-            errors = [e for e in data.get("errors") or [] if e.get("type") != "NOT_FOUND"]
-            if errors and not data.get("data"):
-                raise RuntimeError(f"GitHub API error: {errors[0].get('message')}")
-            return data.get("data") or {}
-        raise RuntimeError("GitHub API kept failing")
+            else:
+                errors = data.get("errors") or []
+                if not any(e.get("type") == "RATE_LIMITED" for e in errors):
+                    # Missing repos come back as null data plus an error; everything else is a real failure.
+                    errors = [e for e in errors if e.get("type") != "NOT_FOUND"]
+                    if errors and not data.get("data"):
+                        raise RuntimeError(f"GitHub API error: {errors[0].get('message')}")
+                    return data.get("data") or {}
+                wait = _limit_wait(200, headers, "rate limit")
+            if waits == 20:
+                raise RuntimeError("GitHub kept rate limiting the requests")
+            waits += 1
+            if self.throttle.limited(wait):
+                n = self.throttle.limit
+                self.note(f"rate limited, waiting {wait}s, then {n} request{'s' if n > 1 else ''} at a time")
 
     def count(self, q: str) -> int:
         data = self.query("query($q: String!) { search(query: $q, type: REPOSITORY, first: 1) { repositoryCount } }",
@@ -208,10 +279,10 @@ class GitHub:
         yield from self.search_all(base, mid + 1, hi)
         yield from self.search_all(base, lo, mid)
 
-    def repos(self, names: list[str], fields: str, batch: int, workers: int = 4) -> Iterator[tuple[str, dict]]:
+    def repos(self, names: list[str], fields: str, batch: int) -> Iterator[tuple[str, dict]]:
         """Look repositories up by name, many per request and a few requests at a time."""
         chunks = [names[i:i + batch] for i in range(0, len(names), batch)]
-        with ThreadPoolExecutor(workers) as pool:
+        with ThreadPoolExecutor(self.workers) as pool:
             for found in pool.map(lambda chunk: self._lookup(chunk, fields), chunks):
                 yield from found
 
