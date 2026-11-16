@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import gzip
 import html
+import http.client
 import json
 import os
 import re
@@ -27,6 +28,9 @@ INDEX_VERSION = 1
 DEFAULT_URL = "https://github.com/pth2002/repofit/releases/download/index/index.json.gz"
 _API = "https://api.github.com/graphql"
 _HEADERS = {"User-Agent": "repofit", "Accept": "application/json"}
+# OSError covers unreachable hosts, timeouts and reset connections. HTTPException covers a response cut off
+# halfway (IncompleteRead), which is not an OSError and used to end a whole weekly build.
+_NETWORK = (OSError, http.client.HTTPException)
 
 # Stars alone favour old giants, so new repos and the agent ecosystem get lanes of their own.
 TOPICS = ("mcp", "mcp-server", "model-context-protocol", "claude-code", "codex", "cursor", "agent-skills",
@@ -60,11 +64,19 @@ def save(index: dict, path: Path) -> None:
     tmp.replace(path)
 
 
-def pull(url: str, path: Path) -> dict:
-    req = urllib.request.Request(url, headers=_HEADERS)
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        data = resp.read()
-    index = json.loads(gzip.decompress(data).decode("utf-8"))
+def pull(url: str, path: Path, attempts: int = 3) -> dict:
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=_HEADERS), timeout=120) as resp:
+                data = resp.read()
+            index = json.loads(gzip.decompress(data).decode("utf-8"))
+            break
+        except urllib.error.HTTPError:
+            raise
+        except (*_NETWORK, EOFError, ValueError) as exc:  # a cut-off download fails to decompress or parse
+            if attempt == attempts - 1:
+                raise RuntimeError(f"download of {url} kept failing: {exc}") from exc
+            time.sleep(3 * (attempt + 1))
     if index.get("version") != INDEX_VERSION:
         raise RuntimeError(f"index at {url} has version {index.get('version')}, this repofit reads {INDEX_VERSION}")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -103,11 +115,11 @@ def fetch_repo(full_name: str, token: str | None = None) -> dict:
             raise RuntimeError(f"no public repository named {full_name}") from exc
         hint = " (rate limit without a token; set GITHUB_TOKEN or log in with gh)" if exc.code in (403, 429) else ""
         raise RuntimeError(f"GitHub API HTTP {exc.code}{hint}") from exc
-    except (urllib.error.URLError, TimeoutError) as exc:
+    except (*_NETWORK, ValueError) as exc:
         raise RuntimeError(f"cannot reach the GitHub API: {exc}") from exc
     try:
         readme = get(base + "/readme", "application/vnd.github.raw").decode("utf-8", "replace")
-    except (urllib.error.URLError, TimeoutError):
+    except _NETWORK:  # the README only sharpens matching, so the repo is still worth returning without it
         readme = ""
     return {"name": meta["full_name"], "description": (meta.get("description") or "").strip(),
             "topics": meta.get("topics") or [], "language": meta.get("language"),
@@ -156,7 +168,7 @@ class GitHub:
                     time.sleep(3 * (attempt + 1))
                     continue
                 raise RuntimeError(f"GitHub API HTTP {exc.code}: {exc.read().decode('utf-8', 'replace')[:200]}") from exc
-            except (urllib.error.URLError, TimeoutError) as exc:
+            except (*_NETWORK, ValueError) as exc:  # ValueError: a body cut off before the JSON ends
                 if attempt < 4:
                     time.sleep(3 * (attempt + 1))
                     continue
@@ -212,7 +224,8 @@ class GitHub:
             data = self.query("query { " + " ".join(parts) + " }")
         except RuntimeError as exc:
             # Large READMEs can push a request past GitHub's time limit; smaller requests get through.
-            if len(chunk) > 5 and ("HTTP 50" in str(exc) or "timeout" in str(exc).lower()):
+            msg = str(exc)
+            if len(chunk) > 5 and ("HTTP 50" in msg or "timeout" in msg.lower() or "cannot reach" in msg):
                 half = len(chunk) // 2
                 return self._lookup(chunk[:half], fields) + self._lookup(chunk[half:], fields)
             raise
@@ -230,7 +243,7 @@ def trending(progress=None) -> dict[str, dict]:
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 repofit"})
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     page = resp.read().decode("utf-8", "replace")
-            except (urllib.error.URLError, TimeoutError) as exc:
+            except _NETWORK as exc:
                 note(f"trending {since} {lang or 'all'} failed: {exc}")
                 continue
             for article in page.split("<article")[1:]:
