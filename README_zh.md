@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/dependencies-none-0d1117?style=flat-square" alt="No dependencies" />
   <img src="https://img.shields.io/badge/MCP-server-0d1117?style=flat-square" alt="MCP server" />
   <a href="https://github.com/pth2002/repofit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-0d1117?style=flat-square" alt="MIT" /></a>
+  <a href="https://glama.ai/mcp/servers/pth2002/repofit"><img src="https://glama.ai/mcp/servers/pth2002/repofit/badges/score.svg" alt="pth2002/repofit MCP server" /></a>
 </p>
 
 <p align="center"><a href="https://github.com/pth2002/repofit/blob/main/README.md">English</a> · <b>简体中文</b></p>
