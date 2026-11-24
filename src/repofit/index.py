@@ -199,6 +199,17 @@ def _limit_wait(code: int, headers, detail: str) -> int | None:
     return 60 if code == 429 or "rate limit" in detail.lower() or "abuse" in detail.lower() else None
 
 
+def _backoff(failures: int) -> int:
+    """Seconds before retry number `failures`: 5, 10, 20, 40. A GitHub outage often lasts longer than a few seconds."""
+    return 5 * 2 ** (failures - 1)
+
+
+def _too_slow(exc: Exception) -> bool:
+    """True when a request failed because GitHub ran out of time or the answer never arrived, so a smaller one may pass."""
+    msg = str(exc)
+    return "HTTP 50" in msg or "timeout" in msg.lower() or "cannot reach" in msg
+
+
 class GitHub:
     def __init__(self, token: str, progress=None, workers: int = 4):
         self.token = token
@@ -226,13 +237,13 @@ class GitHub:
                 if wait is None:
                     if exc.code in (502, 503, 504) and failures < 4:
                         failures += 1
-                        time.sleep(3 * failures)
+                        time.sleep(_backoff(failures))
                         continue
                     raise RuntimeError(f"GitHub API HTTP {exc.code}: {detail[:200]}") from exc
             except (*_NETWORK, ValueError) as exc:  # ValueError: a body cut off before the JSON ends
                 if failures < 4:
                     failures += 1
-                    time.sleep(3 * failures)
+                    time.sleep(_backoff(failures))
                     continue
                 raise RuntimeError(f"cannot reach the GitHub API: {exc}") from exc
             else:
@@ -258,11 +269,20 @@ class GitHub:
 
     def search(self, q: str) -> Iterator[dict]:
         """All results of one search. GitHub stops at 1000, so callers keep queries under that."""
-        gql = ("query($q: String!, $after: String) { search(query: $q, type: REPOSITORY, first: 100, after: $after) "
-               "{ pageInfo { hasNextPage endCursor } nodes { ... on Repository { " + _FIELDS + " } } } }")
-        after = None
+        gql = ("query($q: String!, $after: String, $n: Int!) { search(query: $q, type: REPOSITORY, first: $n, "
+               "after: $after) { pageInfo { hasNextPage endCursor } nodes { ... on Repository { " + _FIELDS + " } } } }")
+        after, size = None, 100
         while True:
-            page = self.query(gql, {"q": q, "after": after})["search"]
+            try:
+                page = self.query(gql, {"q": q, "after": after, "n": size})["search"]
+            except RuntimeError as exc:
+                # A busy GitHub cannot always finish a page of 100 repositories in time. Smaller pages get through,
+                # and the cursor stays valid across page sizes.
+                if size > 12 and _too_slow(exc):
+                    size //= 2
+                    self.note(f"search page for {q!r} timed out, retrying with {size} per page")
+                    continue
+                raise
             yield from (n for n in page["nodes"] if n)
             if not page["pageInfo"]["hasNextPage"]:
                 return
@@ -295,8 +315,7 @@ class GitHub:
             data = self.query("query { " + " ".join(parts) + " }")
         except RuntimeError as exc:
             # Large READMEs can push a request past GitHub's time limit; smaller requests get through.
-            msg = str(exc)
-            if len(chunk) > 5 and ("HTTP 50" in msg or "timeout" in msg.lower() or "cannot reach" in msg):
+            if len(chunk) > 5 and _too_slow(exc):
                 half = len(chunk) // 2
                 return self._lookup(chunk[:half], fields) + self._lookup(chunk[half:], fields)
             raise

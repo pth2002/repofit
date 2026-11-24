@@ -196,3 +196,58 @@ def test_lookups_never_run_more_requests_than_the_throttle_allows(monkeypatch):
     gh.throttle.limit = 2
     found = list(gh.repos([f"o/n{j}" for j in range(40)], "nameWithOwner", batch=5))
     assert len(found) == 40 and state["most"] <= 2
+
+
+# On 2026-11-23 GitHub answered one page of 100 search results with HTTP 502 five times in 30 seconds, and the
+# weekly build stopped there.
+
+def test_gateway_errors_are_retried_with_growing_waits(monkeypatch):
+    calls = fake_urlopen(monkeypatch, refused(502), refused(502), refused(504), refused(502), b'{"data": {"x": 5}}')
+    now = fake_clock(monkeypatch)
+    assert index.GitHub("t").query("query { x }") == {"x": 5}
+    assert len(calls) == 5 and now[0] - 1000 == 5 + 10 + 20 + 40
+
+
+def fake_search(monkeypatch, total, fails):
+    """GitHub search over `total` repos, answering 502 for any page that `fails(size)` says is too big."""
+    sizes = []
+
+    def query(self, q, variables=None):
+        sizes.append(variables["n"])
+        if fails(variables["n"]):
+            raise RuntimeError("GitHub API HTTP 502: <html><title>502 Bad Gateway</title></html>")
+        start = int(variables["after"] or 0)
+        end = min(start + variables["n"], total)
+        nodes = [{"nameWithOwner": f"o/n{j}"} for j in range(start, end)]
+        return {"search": {"nodes": nodes, "pageInfo": {"hasNextPage": end < total, "endCursor": str(end)}}}
+
+    monkeypatch.setattr(index.GitHub, "query", query)
+    return sizes
+
+
+def test_search_halves_the_page_when_github_runs_out_of_time(monkeypatch):
+    sizes, notes = fake_search(monkeypatch, 60, lambda n: n > 25), []
+    found = [r["nameWithOwner"] for r in index.GitHub("t", notes.append).search("topic:self-hosted stars:>=300")]
+    assert found == [f"o/n{j}" for j in range(60)]  # nothing skipped, nothing twice
+    assert sizes == [100, 50, 25, 25, 25]
+    assert notes[-1] == "search page for 'topic:self-hosted stars:>=300' timed out, retrying with 25 per page"
+
+
+def test_search_gives_up_when_small_pages_fail_too(monkeypatch):
+    sizes = fake_search(monkeypatch, 60, lambda n: True)
+    with pytest.raises(RuntimeError, match="HTTP 502"):
+        list(index.GitHub("t").search("q"))
+    assert sizes == [100, 50, 25, 12]
+
+
+def test_search_keeps_the_page_size_for_other_errors(monkeypatch):
+    calls = []
+
+    def query(self, q, variables=None):
+        calls.append(variables["n"])
+        raise RuntimeError("GitHub API HTTP 401: Bad credentials")
+
+    monkeypatch.setattr(index.GitHub, "query", query)
+    with pytest.raises(RuntimeError, match="HTTP 401"):
+        list(index.GitHub("t").search("q"))
+    assert calls == [100]
